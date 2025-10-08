@@ -1,31 +1,47 @@
-# Byte-compiled / optimized / DLL files
+# Python 缓存
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Distribution / packaging
+# 虚拟环境
+.venv/
+venv/
+.env
+
+# 构建产物
 build/
 dist/
 *.egg-info/
 
-# Virtual environments
-.env
-.venv/
-venv/
-
-# IDE
+# 编辑器
 .vscode/
 .idea/
-
-# Logs
-*.log
-
-# Generated assets
-outputs/
-models/
-assets/sfx/
-assets/fonts/
-
-# OS metadata
 .DS_Store
 Thumbs.db
+
+# 模型与输出
+models/*
+outputs/**/*.mp4
+outputs/**/*.json
+outputs/**/*.png
+outputs/**/*.jpg
+outputs/**/*.har
+outputs/**/*.log
+outputs/tmp/
+outputs/frames/
+assets/sfx/*.wav
+assets/sfx/*.mp3
+assets/fonts/*.ttf
+assets/fonts/*.otf
+!models/.gitkeep
+!outputs/.gitkeep
+!outputs/covers/.gitkeep
+!outputs/logs/.gitkeep
+!outputs/frames/.gitkeep
+!outputs/tmp/.gitkeep
+!assets/sfx/.gitkeep
+!assets/fonts/.gitkeep
+
+# 其他缓存
+.cache/
+*.log
