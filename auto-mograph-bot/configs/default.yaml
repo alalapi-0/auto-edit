@@ -1,0 +1,12 @@
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  duration: 8
+
+model_paths:
+  txt2img: ./models/stable-diffusion
+  img2vid: ./models/animate-diff
+  embeddings: ./models/embeddings
+
+prompt_pool_path: ./configs/prompts.txt
