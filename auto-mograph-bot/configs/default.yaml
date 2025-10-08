@@ -1,12 +1,84 @@
+prompt_pool_path: ./configs/prompts.txt
+
 video:
   width: 1080
   height: 1920
-  fps: 30
-  duration: 8
+  fps: 24
+  duration: 6
+  crf: 18
+  bitrate: 8M
+  audio_bitrate: 192k
+  preset: medium
+  cover_export: true
+  cover_timecode: 0.5
 
-model_paths:
-  txt2img: ./models/stable-diffusion
-  img2vid: ./models/animate-diff
-  embeddings: ./models/embeddings
+sd:
+  backend: diffusers
+  model_path: ./models/stable-diffusion
+  sampler: ddim
+  steps: 30
+  guidance_scale: 7.5
+  seed:
 
-prompt_pool_path: ./configs/prompts.txt
+animate:
+  backend: animatediff
+  model_path: ./models/animatediff
+  motion_module: ./models/animatediff/motion_module
+  num_frames: 144
+  fps: 24
+  strength: 0.65
+  seed:
+
+audio:
+  enable_bgm: false
+  bgm_directory: ./assets/sfx
+  normalize: true
+  volume: 0.6
+
+prompts:
+  extra_texts: []
+  extra_styles: []
+  extra_tags: []
+  blacklist_topics: []
+  sensitive_words: []
+  max_title_length: 30
+  max_desc_length: 120
+  max_tags: 5
+
+scheduler:
+  batch_size: 1
+  concurrency: 1
+  max_retries: 2
+  cooldown_sec: 3
+  index_file: outputs/index.jsonl
+  log_dir: outputs/logs
+
+storage:
+  output_dir: outputs
+  cover_dir: outputs/covers
+  frames_dir: outputs/frames
+  tmp_dir: outputs/tmp
+
+uploader:
+  provider: "none"
+  target: douyin
+  visibility: private
+  cookie_path: ./configs/cookies.json
+  extra:
+    api_base: https://open.douyin.com
+    platformVersion: "12"
+    appPackage: com.ss.android.ugc.aweme
+    appActivity: com.ss.android.ugc.aweme.main.MainActivity
+
+safety:
+  enable_sensitive_scan: true
+  enable_ad_scan: true
+  retry_on_violation: false
+
+runtime:
+  seed:
+  dry_run: false
+
+postprocess:
+  subtitle: false
+  watermark: false

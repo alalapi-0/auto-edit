@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "auto-mograph-bot"
 version = "0.1.0"
-description = "Automation pipeline for text-to-image and image-to-video content creation"
+description = "Automation pipeline for text-to-video generation"
 authors = [{ name = "Auto Mograph Team" }]
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,10 +14,9 @@ dependencies = [
     "PyYAML>=6.0.1",
     "pydantic>=2.5",
     "rich>=13.7",
-    "numpy>=1.24",
-    "opencv-python>=4.9",
-    "ffmpeg-python>=0.2.0",
-    "tqdm>=4.66",
+    "httpx>=0.25",
+    "playwright>=1.40",
+    "appium-python-client>=2.11",
 ]
 
 [project.optional-dependencies]

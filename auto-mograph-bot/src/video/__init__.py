@@ -1,12 +1,25 @@
-"""Video post-processing utilities."""
+"""视频相关工具的统一导出。"""
 
-from .ffmpeg_utils import concat_videos, ensure_ffmpeg_available
-from .postprocess import apply_watermark, add_subtitles, adapt_vertical
+from .ffmpeg_utils import (
+    create_placeholder_clip,
+    encode_image_sequence,
+    ensure_ffmpeg_available,
+    extract_cover,
+    mux_audio,
+    run_ffmpeg,
+)
+from .postprocess import adapt_vertical, add_subtitles, apply_watermark, auto_postprocess, mix_bgm
 
 __all__ = [
-    "concat_videos",
+    "create_placeholder_clip",
+    "encode_image_sequence",
     "ensure_ffmpeg_available",
-    "apply_watermark",
-    "add_subtitles",
+    "extract_cover",
+    "mux_audio",
+    "run_ffmpeg",
     "adapt_vertical",
+    "add_subtitles",
+    "apply_watermark",
+    "auto_postprocess",
+    "mix_bgm",
 ]
