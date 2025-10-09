@@ -1,0 +1,33 @@
+/* 简单暗色主题 */
+QWidget {
+    background-color: #222831;
+    color: #eceff4;
+    font-family: "Microsoft YaHei", "PingFang SC", "Helvetica", sans-serif;
+}
+
+QPushButton {
+    background-color: #393e46;
+    border: 1px solid #00adb5;
+    padding: 6px 12px;
+    border-radius: 4px;
+}
+
+QPushButton:hover {
+    background-color: #00adb5;
+}
+
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+    background-color: #2f3640;
+    border: 1px solid #4b5563;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+QListWidget {
+    background-color: #1b1f27;
+    border: none;
+}
+
+QTableWidget {
+    gridline-color: #4b5563;
+}
