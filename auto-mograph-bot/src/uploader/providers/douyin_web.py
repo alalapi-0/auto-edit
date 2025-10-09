@@ -1,4 +1,4 @@
-"""Xiaohongshu web uploader backed by the encrypted secrets vault."""
+"""Douyin web uploader that consumes encrypted storage states."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from ui.services.secrets_service import (
 console = Console()
 
 
-class XiaohongshuWebUploader:
-    """基于 Playwright 的浏览器自动化草稿上传流程。"""
+class DouyinWebUploader:
+    """Playwright-based placeholder uploader for Douyin web drafts."""
 
     provider_name = "web"
 
@@ -29,12 +29,11 @@ class XiaohongshuWebUploader:
         self.log_dir = config.scheduler.log_dir
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.visibility = config.uploader.visibility
-        self.secret_name = "xiaohongshu_state"
+        self.secret_name = "douyin_state"
         self.secrets_service = SecretsService()
 
     def prepare_metadata(self, video_path: Path, metadata: UploadMetadata) -> UploadMetadata:
-        console.log("[cyan]Web Provider 将标题截断以防止超长。[/cyan]")
-        metadata.title = metadata.title[:30]
+        console.log("[cyan]Douyin Web Provider 正在准备元数据。[/cyan]")
         return metadata
 
     async def _upload_async(
@@ -46,18 +45,12 @@ class XiaohongshuWebUploader:
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(storage_state=io.BytesIO(state_bytes))
             page = await context.new_page()
-            await page.goto("https://creator.xiaohongshu.com/creation")
-            await page.wait_for_timeout(500)
-            await page.set_input_files("input[type=file]", str(video_path))
-            await page.fill("textarea[placeholder='写点什么...']", metadata.description)
-            await page.fill("input[placeholder='添加标题']", metadata.title)
-            if metadata.tags:
-                await page.fill("input[placeholder='添加话题']", " ".join(metadata.tags))
+            await page.goto("https://creator.douyin.com/creator-micro/creation/content/upload")
             await page.wait_for_timeout(500)
             await browser.close()
         return DraftResult(
             success=True,
-            message="已模拟 Web 自动化流程",
+            message="已模拟 Douyin Web 自动化流程",
             provider=self.provider_name,
         )
 
@@ -73,15 +66,15 @@ class XiaohongshuWebUploader:
         try:
             return asyncio.run(self._upload_async(video_path, metadata, state_bytes))
         except Exception as exc:  # noqa: BLE001
-            error_log = self.log_dir / f"xiaohongshu_error_{video_path.stem}.log"
+            error_log = self.log_dir / f"douyin_error_{video_path.stem}.log"
             error_log.write_text(str(exc), encoding="utf-8")
-            console.log(f"[red]Web 上传失败：{exc}[/red]")
+            console.log(f"[red]Douyin Web 上传失败：{exc}[/red]")
             return DraftResult(success=False, message=str(exc), provider=self.provider_name)
 
     def _log_secret_issue(self, exc: Exception) -> None:
-        error_log = self.log_dir / "xiaohongshu_secrets_error.log"
+        error_log = self.log_dir / "douyin_secrets_error.log"
         error_log.write_text(str(exc), encoding="utf-8")
-        console.log(f"[red]加载登录态失败：{exc}[/red]")
+        console.log(f"[red]Douyin 登录态加载失败：{exc}[/red]")
 
 
-__all__ = ["XiaohongshuWebUploader"]
+__all__ = ["DouyinWebUploader"]
