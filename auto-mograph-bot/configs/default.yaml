@@ -47,11 +47,14 @@ prompts:
 
 scheduler:
   batch_size: 1
-  concurrency: 1
+  concurrency: 2
+  min_free_vram_mb: 3000
+  hard_serial: true
   max_retries: 2
   cooldown_sec: 3
   index_file: outputs/index.jsonl
   log_dir: outputs/logs
+  lock_path: locks/gpu.lock
 
 storage:
   output_dir: outputs

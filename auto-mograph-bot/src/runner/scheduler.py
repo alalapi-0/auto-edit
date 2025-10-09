@@ -10,7 +10,10 @@ from typing import Callable, Dict, List, Optional, Set
 from rich.console import Console
 
 from ..config import PipelineConfig
+from ..logging import get_logger, log_resource_snapshot
+from ..system import get_cpu_cores, get_gpu_info
 from .job import GenerationJob, JobResult
+from .locks import FileLock
 
 console = Console()
 
@@ -24,6 +27,7 @@ class GenerationScheduler:
         self.index_file = config.scheduler.index_file
         self.completed_hashes: Set[str] = self._load_existing_hashes()
         self.index_file.parent.mkdir(parents=True, exist_ok=True)
+        self.logger = get_logger(__name__)
 
     def _load_existing_hashes(self) -> Set[str]:
         hashes: Set[str] = set()
@@ -60,12 +64,14 @@ class GenerationScheduler:
         with self.index_file.open("a", encoding="utf-8") as fp:
             fp.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    def _run_single(self, attempt: int) -> Optional[JobResult]:
+    def _run_single(self, attempt: int, lock_path: str) -> Optional[JobResult]:
         job = self.job_factory()
         try:
-            result = job.run()
+            with FileLock(lock_path):
+                result = job.run()
         except Exception as exc:  # noqa: BLE001
             console.log(f"[red]任务执行失败（第 {attempt} 次）：{exc}[/red]")
+            self.logger.error("任务执行失败", exc_info=exc)
             time.sleep(self.config.scheduler.cooldown_sec)
             return None
 
@@ -82,29 +88,73 @@ class GenerationScheduler:
         """按照配置批量执行任务。"""
 
         results: List[JobResult] = []
-        max_retries = self.config.scheduler.max_retries
-        concurrency = max(1, self.config.scheduler.concurrency)
-        if concurrency > 1:
-            console.log("[yellow]当前骨架未实现真正并发，已将并发度降至 1。[/yellow]")
+        scheduler_cfg = self.config.scheduler
+        max_retries = scheduler_cfg.max_retries
+        requested_concurrency = max(1, scheduler_cfg.concurrency)
+        gpu_info = get_gpu_info()
+        free_memory = int(gpu_info.get("free", 0) or 0)
+        total_memory = int(gpu_info.get("total", 0) or 0)
+        cpu_cores = max(1, get_cpu_cores())
+
+        self.logger.info(
+            "检测到 GPU: %s | Total: %sMB | Free: %sMB",
+            gpu_info.get("name", "unknown"),
+            total_memory,
+            free_memory,
+        )
+
+        concurrency = requested_concurrency
+        if scheduler_cfg.hard_serial and (
+            total_memory <= 0
+            or free_memory < scheduler_cfg.min_free_vram_mb * requested_concurrency
+        ):
             concurrency = 1
+            message = (
+                f"显存不足({free_memory}MB)，强制串行执行。"
+                if total_memory > 0
+                else "检测到 CPU 模式，强制串行执行。"
+            )
+            console.log(f"[yellow]{message}[/yellow]")
+            self.logger.warning(message)
+        else:
+            concurrency = min(requested_concurrency, cpu_cores)
+            if concurrency < requested_concurrency:
+                notice = (
+                    f"CPU 核心数限制，将并发度限制为 {concurrency}。"
+                    if cpu_cores
+                    else "无法检测 CPU 核心数，默认串行执行。"
+                )
+                console.log(f"[yellow]{notice}[/yellow]")
+                self.logger.info(notice)
+
+        log_resource_snapshot(
+            self.logger,
+            gpu_info,
+            cpu_cores,
+            requested_concurrency,
+            concurrency,
+        )
 
         pending = list(range(count))
+        lock_path = str(scheduler_cfg.lock_path)
         while pending:
             batch = pending[:concurrency]
             del pending[:concurrency]
             futures = []
             with ThreadPoolExecutor(max_workers=concurrency) as executor:
                 for _ in batch:
-                    futures.append(executor.submit(self._run_with_retry, max_retries))
+                    futures.append(
+                        executor.submit(self._run_with_retry, max_retries, lock_path)
+                    )
                 for future in as_completed(futures):
                     result = future.result()
                     if result:
                         results.append(result)
         return results
 
-    def _run_with_retry(self, max_retries: int) -> Optional[JobResult]:
+    def _run_with_retry(self, max_retries: int, lock_path: str) -> Optional[JobResult]:
         for attempt in range(1, max_retries + 2):
-            outcome = self._run_single(attempt)
+            outcome = self._run_single(attempt, lock_path)
             if outcome:
                 return outcome
         return None

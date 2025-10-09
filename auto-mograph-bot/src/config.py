@@ -110,15 +110,24 @@ class SchedulerSettings(BaseModel):
 
     batch_size: int = Field(1, description="每轮生成的任务数")
     concurrency: int = Field(1, description="并发度（受显存限制，建议串行）")
+    min_free_vram_mb: int = Field(3000, description="单个任务所需的最小空闲显存(MB)")
+    hard_serial: bool = Field(True, description="显存不足时是否强制串行执行")
     max_retries: int = Field(2, description="失败重试次数")
     cooldown_sec: float = Field(3.0, description="重试前冷却时间")
     index_file: Path = Field(Path("outputs/index.jsonl"), description="产物索引 JSONL 文件路径")
     log_dir: Path = Field(Path("outputs/logs"), description="日志输出目录")
+    lock_path: Path = Field(Path("locks/gpu.lock"), description="并发互斥锁文件路径")
 
     @validator("batch_size", "concurrency", "max_retries")
     def validate_positive(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("批量参数必须大于 0")
+        return value
+
+    @validator("min_free_vram_mb")
+    def validate_min_vram(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("最小空闲显存需求不能为负数")
         return value
 
     @validator("cooldown_sec")
@@ -304,6 +313,7 @@ def load_config(config_path: Optional[Path] = None, env_path: Optional[Path] = N
         model.storage.tmp_dir,
         model.scheduler.log_dir,
         model.scheduler.index_file.parent,
+        model.scheduler.lock_path.parent,
     ]:
         Path(path_attr).mkdir(parents=True, exist_ok=True)
 
