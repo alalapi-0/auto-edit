@@ -47,5 +47,5 @@ assets/fonts/*.otf
 *.log
 
 # UI Secrets
-secrets/
-*.enc
+secrets/*.enc
+secrets/*.storage.json

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
@@ -29,7 +30,7 @@ from .components.views.runs_view import RunsView
 from .components.views.config_editor import ConfigEditorView
 from .components.views.first_run_wizard import FirstRunWizard
 from .services.pipeline_service import PipelineService
-from .services.secrets_service import KeyringBackend, SecretsService
+from .services.secrets_service import SecretsService
 from .services.uploader_service import UploaderService
 from .state import AppState
 
@@ -46,7 +47,7 @@ class MainWindow(QMainWindow):
 
         self.pipeline_service = PipelineService(state)
         self.uploader_service = UploaderService(state)
-        self.secrets_service = SecretsService(KeyringBackend("auto-mograph-bot"))
+        self.secrets_service = SecretsService()
 
         self.dashboard_view = DashboardView(state, self.pipeline_service, self.uploader_service)
         self.pipeline_form = PipelineForm(state)
@@ -113,6 +114,7 @@ class MainWindow(QMainWindow):
         self.refresh_views()
         if self._show_wizard:
             self._maybe_show_wizard()
+        self._init_status_timer()
 
     # ------------------------------------------------------------------
     def _maybe_show_wizard(self) -> None:
@@ -135,6 +137,7 @@ class MainWindow(QMainWindow):
         self.config_editor.refresh()
         self.runs_view.refresh()
         self.dashboard_view.refresh_status()
+        self.refresh_status_bar()
 
     # ------------------------------------------------------------------
     def on_profile_changed(self, name: str) -> None:
@@ -173,6 +176,26 @@ class MainWindow(QMainWindow):
         if self.profile_combo.findText(name) == -1:
             self.profile_combo.addItem(name)
         self.profile_combo.setCurrentText(name)
+
+    # ------------------------------------------------------------------
+    def _init_status_timer(self) -> None:
+        self.refresh_status_bar()
+        self._status_timer = QTimer(self)
+        self._status_timer.setInterval(60_000)
+        self._status_timer.timeout.connect(self.refresh_status_bar)
+        self._status_timer.start()
+
+    # ------------------------------------------------------------------
+    def refresh_status_bar(self) -> None:
+        infos = self.secrets_service.list_all()
+        if not infos:
+            self.statusBar().showMessage("尚未导入登录态")
+            return
+        message = " | ".join(
+            f"{item['name']}: D-{item['days_left']}"
+            for item in infos
+        )
+        self.statusBar().showMessage(message)
 
 
 __all__ = ["MainWindow"]
