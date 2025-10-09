@@ -45,3 +45,7 @@ assets/fonts/*.otf
 # 其他缓存
 .cache/
 *.log
+
+# UI Secrets
+secrets/
+*.enc
