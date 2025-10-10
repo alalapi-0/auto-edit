@@ -79,6 +79,7 @@ class GenerationJob:
             max_title=self.config.prompts.max_title_length,
             max_desc=self.config.prompts.max_desc_length,
             max_tags=self.config.prompts.max_tags,
+            sampling_cfg=self.config.raw_data.get("sampling", {}),
         )
         console.log(f"[bold cyan]选定 Prompt：[/bold cyan]{candidate.prompt}")
 

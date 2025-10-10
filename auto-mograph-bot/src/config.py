@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field, validator
-import yaml
 
+from .config_center.center import ConfigCenter
 from .logging.structlog import init_logging, log_event, log_exception
 
 
@@ -304,66 +302,42 @@ class PipelineConfig:
         return None
 
 
-def _load_yaml_config(path: Path) -> Dict[str, Any]:
-    """读取 YAML 文件内容，若为空则返回空字典。"""
-
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8") as fp:
-        return yaml.safe_load(fp) or {}
+_CENTER = ConfigCenter(ConfigModel)
 
 
-def _merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-    """递归合并配置字典，override 优先。"""
+def get_config_center() -> ConfigCenter:
+    """返回全局配置中心实例。"""
 
-    result = dict(base)
-    for key, value in override.items():
-        if isinstance(value, dict) and isinstance(result.get(key), dict):
-            result[key] = _merge_dict(result[key], value)
-        else:
-            result[key] = value
-    return result
+    return _CENTER
+
+
+def get_config_view() -> Mapping[str, Any]:
+    """返回当前冻结的配置视图。"""
+
+    return _CENTER.get()
 
 
 def load_config(config_path: Optional[Path] = None, env_path: Optional[Path] = None) -> PipelineConfig:
-    """加载配置：优先读取 .env，再解析 YAML，并生成 PipelineConfig。"""
+    """加载配置并返回 PipelineConfig，所有合并逻辑由 ConfigCenter 处理。"""
 
+    base_path = Path("configs/default.yaml")
+    extra_paths: List[str] = []
+    if config_path is not None:
+        config_path = Path(config_path)
+        if config_path != base_path:
+            extra_paths.append(str(config_path))
+
+    env_value: Optional[str]
     if env_path is None:
-        env_path = Path(".env")
-    if env_path.exists():
-        load_dotenv(env_path, override=False)
+        env_value = str(Path(".env"))
+    else:
+        env_value = str(env_path)
 
-    if config_path is None:
-        config_path = Path("configs/default.yaml")
+    _CENTER.load(base_paths=[str(base_path)], extra_paths=extra_paths, env_path=env_value)
+    model = _CENTER.get_model()
+    if model is None or not isinstance(model, ConfigModel):
+        raise RuntimeError("配置验证失败，未能生成配置模型")
 
-    yaml_config = _load_yaml_config(config_path)
-
-    env_override: Dict[str, Any] = {
-        "sd": {
-            "webui_url": os.getenv("SD_WEBUI_URL"),
-            "webui_token": os.getenv("SD_WEBUI_TOKEN"),
-            "model_path": Path(os.getenv("SD_MODEL_PATH")) if os.getenv("SD_MODEL_PATH") else None,
-        },
-        "animate": {
-            "model_path": Path(os.getenv("ANIMATEDIFF_MODEL_PATH")) if os.getenv("ANIMATEDIFF_MODEL_PATH") else None,
-            "motion_module": Path(os.getenv("ANIMATEDIFF_MOTION_PATH")) if os.getenv("ANIMATEDIFF_MOTION_PATH") else None,
-        },
-        "uploader": {
-            "api_token": os.getenv("UPLOADER_API_TOKEN"),
-            "cookie_path": Path(os.getenv("UPLOADER_COOKIE_PATH")) if os.getenv("UPLOADER_COOKIE_PATH") else None,
-            "appium_server": os.getenv("APPIUM_SERVER"),
-            "device_name": os.getenv("APPIUM_DEVICE_NAME"),
-        },
-        "runtime": {
-            "seed": int(os.getenv("GLOBAL_SEED")) if os.getenv("GLOBAL_SEED") else None,
-            "dry_run": os.getenv("DRY_RUN", "false").lower() == "true",
-        },
-    }
-
-    merged = _merge_dict(yaml_config, env_override)
-    model = ConfigModel.model_validate(merged)
-
-    # 规范化路径，确保目录存在
     for path_attr in [
         model.storage.output_dir,
         model.storage.cover_dir,
@@ -388,7 +362,7 @@ def load_config(config_path: Optional[Path] = None, env_path: Optional[Path] = N
     except Exception as err:  # noqa: BLE001
         log_exception("retry_configuration_failed", err)
 
-    return PipelineConfig(model=model, raw_data=merged)
+    return PipelineConfig(model=model, raw_data=_CENTER.get_raw())
 
 
 __all__ = [
@@ -404,5 +378,7 @@ __all__ = [
     "UploaderSettings",
     "SafetySettings",
     "RuntimeSettings",
+    "get_config_center",
+    "get_config_view",
     "load_config",
 ]

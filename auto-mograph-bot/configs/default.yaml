@@ -45,6 +45,18 @@ prompts:
   max_desc_length: 120
   max_tags: 5
 
+sampling:
+  max_retries: 10
+  stats_log: true
+  fallback:
+    enabled: true
+    title: "今天也要加油"
+    description: "保持创作与节奏，见证每天的小进步。"
+    tags: ["日常", "励志", "记录"]
+    prompt_text: "清新剪贴风, 竖屏, 简约背景, 主角置中"
+  blacklist: []
+  safe_words: ["温暖", "可爱", "元气"]
+
 scheduler:
   batch_size: 1
   concurrency: 2
@@ -96,3 +108,6 @@ retry:
 
 logging:
   jsonl_path: "outputs/logs/pipeline.jsonl"
+
+profiles:
+  dir: "profiles"
