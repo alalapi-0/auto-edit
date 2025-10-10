@@ -6,12 +6,14 @@ import json
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from rich.console import Console
 
 from ..config import PipelineConfig
+from ..logging.structlog import log_event
 from ..video.ffmpeg_utils import create_placeholder_clip
+from .txt2img import get_retry_cfg, with_retry
 
 console = Console()
 
@@ -43,10 +45,15 @@ class BaseImg2VidBackend:
 class AnimateDiffBackend(BaseImg2VidBackend):
     """AnimateDiff 占位实现。"""
 
-    def __init__(self, model_path: Optional[Path], motion_module: Optional[Path]) -> None:
+    def __init__(
+        self,
+        model_path: Optional[Path],
+        motion_module: Optional[Path],
+    ) -> None:
         self.model_path = model_path
         self.motion_module = motion_module
 
+    @with_retry
     def generate(
         self,
         image_path: Path,
@@ -72,6 +79,14 @@ class AnimateDiffBackend(BaseImg2VidBackend):
         duration = max(1, num_frames // max(1, fps))
         create_placeholder_clip(output_path, width=width, height=height, duration=duration, fps=fps, text="AnimateDiff 占位")
         console.log(f"[blue]AnimateDiff 占位视频已生成：[/blue]{output_path}")
+        log_event(
+            "img2vid_placeholder",
+            backend="animatediff",
+            output=str(output_path),
+            seed=seed,
+            fps=fps,
+            frames=num_frames,
+        )
         return Img2VidResult(video_path=output_path, seed=seed)
 
 
@@ -81,6 +96,7 @@ class StableVideoDiffusionBackend(BaseImg2VidBackend):
     def __init__(self, model_path: Optional[Path]) -> None:
         self.model_path = model_path
 
+    @with_retry
     def generate(
         self,
         image_path: Path,
@@ -105,6 +121,14 @@ class StableVideoDiffusionBackend(BaseImg2VidBackend):
         duration = max(1, num_frames // max(1, fps))
         create_placeholder_clip(output_path, width=width, height=height, duration=duration, fps=fps, text="SVD 占位")
         console.log(f"[blue]SVD 占位视频已生成：[/blue]{output_path}")
+        log_event(
+            "img2vid_placeholder",
+            backend="svd",
+            output=str(output_path),
+            seed=seed,
+            fps=fps,
+            frames=num_frames,
+        )
         return Img2VidResult(video_path=output_path, seed=seed)
 
 
@@ -115,9 +139,13 @@ class Img2VidGenerator:
         self.config = config
         animate_cfg = config.animate
         if animate_cfg.backend == "svd":
-            self.backend: BaseImg2VidBackend = StableVideoDiffusionBackend(animate_cfg.model_path)
+            self.backend = StableVideoDiffusionBackend(animate_cfg.model_path)
         else:
-            self.backend = AnimateDiffBackend(animate_cfg.model_path, animate_cfg.motion_module)
+            self.backend = AnimateDiffBackend(
+                animate_cfg.model_path,
+                animate_cfg.motion_module,
+            )
+        self.retry_cfg: Dict[str, object] = get_retry_cfg()
 
     def generate(self, image_path: Path, output_path: Path, seed: Optional[int] = None) -> Img2VidResult:
         """执行图生视频流程。"""
@@ -136,6 +164,12 @@ class Img2VidGenerator:
                 encoding="utf-8",
             )
             console.log(f"[yellow]Dry-run 模式下未真正推理视频：[/yellow]{output_path}")
+            log_event(
+                "img2vid_dry_run",
+                backend=animate_cfg.backend,
+                output=str(output_path),
+                seed=final_seed,
+            )
             return Img2VidResult(video_path=output_path, seed=final_seed)
 
         return self.backend.generate(
@@ -146,6 +180,11 @@ class Img2VidGenerator:
             num_frames=animate_cfg.num_frames,
             width=self.config.video.width,
             height=self.config.video.height,
+            _retry_cfg=self.retry_cfg,
+            _log_ctx={
+                "backend": animate_cfg.backend,
+                "seed": final_seed,
+            },
         )
 
 

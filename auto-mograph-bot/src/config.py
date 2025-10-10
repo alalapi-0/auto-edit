@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field, validator
 import yaml
 
+from .logging.structlog import init_logging, log_event, log_exception
+
 
 class VideoSettings(BaseModel):
     """视频导出相关参数配置。"""
@@ -96,6 +98,9 @@ class AnimateSettings(BaseModel):
         return value
 
 
+# ---------------------------- 音频与通用设置 ----------------------------
+
+
 class AudioSettings(BaseModel):
     """音频/BGM 设置。"""
 
@@ -174,6 +179,49 @@ class RuntimeSettings(BaseModel):
     dry_run: bool = Field(False, description="是否仅输出指令不实际调用重量模型")
 
 
+class FFMpegRetrySettings(BaseModel):
+    """FFmpeg 专用的重试策略配置。"""
+
+    enabled: bool = Field(True, description="是否为 FFmpeg 启用重试")
+    retryable_exit_codes: List[int] = Field(
+        default_factory=lambda: [1, 255],
+        description="允许重试的退出码列表",
+    )
+
+
+class RetrySettings(BaseModel):
+    """统一的退避重试配置。"""
+
+    max_attempts: int = Field(3, description="最大尝试次数（包含首次调用）")
+    backoff_factor: float = Field(2.0, description="指数退避倍率")
+    jitter_ms: int = Field(150, description="附加抖动范围（毫秒）")
+    ffmpeg: FFMpegRetrySettings = Field(default_factory=FFMpegRetrySettings)
+
+    @validator("max_attempts")
+    def validate_max_attempts(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("max_attempts 必须大于 0")
+        return value
+
+    @validator("backoff_factor")
+    def validate_backoff(cls, value: float) -> float:
+        if value < 1:
+            raise ValueError("backoff_factor 不能小于 1")
+        return value
+
+    @validator("jitter_ms")
+    def validate_jitter(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("jitter_ms 不能为负数")
+        return value
+
+
+class LoggingSettings(BaseModel):
+    """结构化日志输出配置。"""
+
+    jsonl_path: Path = Field(Path("outputs/logs/pipeline.jsonl"), description="JSONL 日志文件路径")
+
+
 class ConfigModel(BaseModel):
     """顶层配置模型。"""
 
@@ -187,6 +235,8 @@ class ConfigModel(BaseModel):
     uploader: UploaderSettings = Field(default_factory=UploaderSettings)
     safety: SafetySettings = Field(default_factory=SafetySettings)
     runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
+    retry: RetrySettings = Field(default_factory=RetrySettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
 
 
 @dataclass
@@ -235,6 +285,14 @@ class PipelineConfig:
     @property
     def runtime(self) -> RuntimeSettings:
         return self.model.runtime
+
+    @property
+    def retry(self) -> RetrySettings:
+        return self.model.retry
+
+    @property
+    def logging(self) -> LoggingSettings:
+        return self.model.logging
 
     @property
     def prompt_pool_path(self) -> Optional[Path]:
@@ -314,8 +372,21 @@ def load_config(config_path: Optional[Path] = None, env_path: Optional[Path] = N
         model.scheduler.log_dir,
         model.scheduler.index_file.parent,
         model.scheduler.lock_path.parent,
+        model.logging.jsonl_path.parent,
     ]:
         Path(path_attr).mkdir(parents=True, exist_ok=True)
+
+    init_logging(str(model.logging.jsonl_path))
+    log_event("logging_initialized", path=str(model.logging.jsonl_path))
+
+    try:
+        from .sd import txt2img as txt2img_module
+        from .video import ffmpeg_utils as ffmpeg_module
+
+        txt2img_module.configure_sd_retry(model.retry)
+        ffmpeg_module.configure_ffmpeg_retry(model.retry)
+    except Exception as err:  # noqa: BLE001
+        log_exception("retry_configuration_failed", err)
 
     return PipelineConfig(model=model, raw_data=merged)
 
